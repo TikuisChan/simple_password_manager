@@ -1,6 +1,17 @@
 import sqlite3
 import tkinter as tk
 from tkinter import ttk
+import configparser
+from tables import create_db
+import os
+
+'''
+TODO:
+- separate db management and ui codes
+- insert, update and delete records
+- create generic connector
+- review ui
+'''
 
 
 class User(object):
@@ -15,10 +26,10 @@ class LoginFrame(tk.Frame):
     fake_record2 = ['twitter', 'test1234', 'pw123', 'pw234', 'remarks on twitter']
     root_user = User('root', 'root')
 
-    def __init__(self, parent, *args, **kwargs):
+    def __init__(self, parent, db_name, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
-        self.conn = connect_db(':memory:')
+        self.conn = connect_db(db_name)
         create_tables(self.conn)
         self._add_dummy()
         self.login_window()
@@ -233,9 +244,15 @@ def get_user(user, conn):
 
 
 if __name__ == '__main__':
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+
+    if config['sqlite']['db_name'] not in os.listdir():
+        create_db('sqlite:///' + config['sqlite']['db_name'])
+
     root = tk.Tk()
     root.title('password manager')
-    root.geometry('400x400')
+    root.geometry(config['geometry']['screen_size'])
     # root['background'] = '#3E4149'
     t = LoginFrame(root)
     root.mainloop()
