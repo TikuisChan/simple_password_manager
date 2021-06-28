@@ -36,3 +36,12 @@ class AccountDetails(Base):
 def create_db(db_name):
     engine = create_engine(db_name)
     Base.metadata.create_all(engine)
+
+
+# TODO: organize into a connector class?  > different storage method can use the same format
+def login(user):
+    return True
+
+
+def load_record(user):
+    return {}

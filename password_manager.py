@@ -2,7 +2,7 @@ import sqlite3
 import tkinter as tk
 from tkinter import ttk
 import configparser
-from tables import create_db
+from tables import create_db, login, load_record
 import os
 
 '''
@@ -14,24 +14,10 @@ TODO:
 '''
 
 
-class User(object):
-    def __init__(self, user_name, password):
-        self.username = user_name
-        self.password = password
-
-
 class LoginFrame(tk.Frame):
-    record_keys = ['media', 'login_name', 'password1', 'password2', 'remarks',]
-    fake_record1 = ['facebook', 'test123', 'pw123', 'pw234', 'remarks']
-    fake_record2 = ['twitter', 'test1234', 'pw123', 'pw234', 'remarks on twitter']
-    root_user = User('root', 'root')
-
-    def __init__(self, parent, db_name, *args, **kwargs):
+    def __init__(self, parent, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.parent = parent
-        self.conn = connect_db(db_name)
-        create_tables(self.conn)
-        self._add_dummy()
         self.login_window()
 
     # TODO: amend GUI creating func
@@ -50,48 +36,35 @@ class LoginFrame(tk.Frame):
         input2 = tk.Entry(self, width=20, textvariable=pw)
         input2.grid(row=1, column=1, sticky='nsew')
 
-        input1.bind("<KeyPress-Return>", lambda event: self.get_user_login(user_name, pw))
-        input2.bind("<KeyPress-Return>", lambda event: self.get_user_login(user_name, pw))
+        user = {'username': user_name.get(), 'password': pw.get()}
+        input1.bind("<KeyPress-Return>", lambda event: self.check_login(user))
+        input2.bind("<KeyPress-Return>", lambda event: self.check_login(user))
 
         # btms
         btm_frame = tk.Frame(self)
-        btm1 = tk.Button(btm_frame, text='Login', command=lambda: self.get_user_login(user_name, pw))
+        btm1 = tk.Button(btm_frame, text='Login', command=lambda: self.check_login(user_name, pw))
         btm1.grid(row=0, column=0)
         btm2 = tk.Button(btm_frame, text='QUIT', command=self.parent.quit)
         btm2.grid(row=0, column=1)
         btm_frame.grid(row=2, columnspan=2)
         self.place(relx=0.5, rely=0.5, anchor="center")
 
-    def get_user_login(self, user_name, pw):
-        user = User(user_name.get(), pw.get())
-        check_user = get_user(user, self.conn)
-        if check_user and check_user[0][1] == user.password:
+    def check_login(self, user):
+        check_user = login(user)
+        if check_user is True:
             self.place_forget()
-            main = MainApplication(self.parent, user=user, conn=self.conn)
+            main = MainApplication(self.parent, user=user)
         else:
-            error_label = tk.Label(self, text="Invalid user name and password, please input again...")
+            error_label = tk.Label(self, text="Invalid user name and password")
             error_label.grid(row=4, columnspan=2)
-
-    def _add_dummy(self):
-        # add fake reocrds for testing
-        user = User('shit', 'shit')
-        add_user(user, self.conn)
-        for _ in range(10):
-            add_record(user, {k:v for k, v in zip(self.record_keys, self.fake_record1)}, self.conn)
-
-        user = User('wow', 'wow')
-        add_user(user, self.conn)
-        for _ in range(5):
-            add_record(user, {k:v for k, v in zip(self.record_keys, self.fake_record2)}, self.conn)
 
 
 class MainApplication(tk.Frame):
-    def __init__(self, parent, user, conn, *args, **kwargs):
+    def __init__(self, parent, user, *args, **kwargs):
         super().__init__(parent, *args, **kwargs)
         self.user = user
-        self.conn = conn
         self.parent = parent
-        self.parent.geometry('800x400')
+        self.parent.geometry('{}x{}'.format(parent.winfo_width() * 2, parent.winfo_height()))
         self.main_window()
 
     def main_window(self):
@@ -117,7 +90,7 @@ class MainApplication(tk.Frame):
 
     def display_records(self):
         self.records_frame = tk.Frame(self)
-        records = get_record(self.user, self.conn)
+        records = load_record(self.user)
 
         setting = {'login name': 120, 'password1': 120, 'password2': 120, 'remarks': 300}
         tree = ttk.Treeview(self.records_frame)
@@ -163,84 +136,13 @@ class EditPage(tk.Frame):
     def confirm(self):
         # print([x.get() for x in self.new_records.values()])
         record = {k: v.get() for k, v in self.new_records.items()}
-        add_record(self.parent.user, record, self.parent.conn)
+        # add_record(self.parent.user, record, self.parent.conn)
         self.cancel()
 
     def cancel(self):
         self.destroy()
         self.parent.display_records()
         self.parent.main_btm.grid(row=2)
-
-
-def connect_db(db_name):
-    try:
-        conn = sqlite3.connect(db_name)
-        return conn
-    except Exception as e:
-        print(e)
-
-
-def create_tables(conn):
-    with conn:
-        cur = conn.cursor()
-        # user table
-        cur.execute("""CREATE TABLE IF NOT EXISTS user (username text, password text)""")
-        # create root user if not exist
-        first_user = User('root', 'root')
-        if not get_user(first_user, conn):
-            add_user(first_user, conn)
-        # data table
-        cur.execute("""CREATE TABLE IF NOT EXISTS main
-            (
-            username text,
-            media text,
-            login_name text,
-            password1 text,
-            password2 text,
-            remarks text
-            )""")
-
-
-def get_record(user, conn):
-    with conn:
-        cur = conn.cursor()
-        cur.execute('''SELECT * FROM main WHERE username=:username''',
-            {'username': user.username}
-        )
-        return cur.fetchall()
-
-
-def add_record(user, record, conn):
-    with conn:
-        cur = conn.cursor()
-        cur.execute("""INSERT INTO main VALUES
-            (:username, :media, :login_name, :password1, :password2, :remarks)""",
-            {
-                'username': user.username,
-                'media': record.get('media'),
-                'login_name': record.get('login_name'),
-                'password1': record.get('password1'),
-                'password2': record.get('password2'),
-                'remarks': record.get('remarks'),
-            }
-        )
-
-
-def add_user(user, conn):
-    with conn:
-        cur = conn.cursor()
-        cur.execute("""INSERT INTO user VALUES (:username, :password)""",
-            {'username': user.username, 'password': user.password}
-        )
-
-
-def get_user(user, conn):
-    with conn:
-        cur = conn.cursor()
-        cur.execute("""SELECT * FROM user WHERE username=:username""",
-            {'username': user.username}
-        )
-        return cur.fetchall()
 
 
 if __name__ == '__main__':
@@ -252,7 +154,10 @@ if __name__ == '__main__':
 
     root = tk.Tk()
     root.title('password manager')
-    root.geometry(config['geometry']['screen_size'])
+
+    geo = config['geometry']
+
+    root.geometry('{}x{}'.format(geo['screen_width'], geo['screen_hight']))
     # root['background'] = '#3E4149'
     t = LoginFrame(root)
     root.mainloop()
